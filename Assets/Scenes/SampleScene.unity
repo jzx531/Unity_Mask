@@ -521,7 +521,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ChatSendController
   inputField: {fileID: 1699808615}
   messageScrollRect: {fileID: 1106557041}
-  content: {fileID: 1901034346}
+  session: {fileID: 0}
   rightBubblePrefab: {fileID: 4953144699576012327, guid: c920f179adb5c0644bd1038ca02e0e95, type: 3}
 --- !u!114 &490334315
 MonoBehaviour:
@@ -535,13 +535,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 43918b73cd085174f9697953aab296c2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ChatDialogueController
+  session: {fileID: 0}
   inputField: {fileID: 1699808615}
   messageScrollRect: {fileID: 1106557041}
-  content: {fileID: 1901034346}
+  csvAsset: {fileID: 4900000, guid: da1462165b5d00b458ba8e4cdf322013, type: 3}
+  groupCount: 4
   leftBubblePrefab: {fileID: 1444756918072149114, guid: d51c3eb566da2674885b2ae7e1e99ae7, type: 3}
   rightBubblePrefab: {fileID: 4953144699576012327, guid: c920f179adb5c0644bd1038ca02e0e95, type: 3}
-  choicePanel: {fileID: 171965317}
   choiceBubblePrefab: {fileID: 4953144699576012327, guid: 1bff9700464e33b479a3ae5c4e9d07fe, type: 3}
+  daySeparatorPrefab: {fileID: 0}
   maxChoicesToShow: 3
 --- !u!1 &519420028
 GameObject:

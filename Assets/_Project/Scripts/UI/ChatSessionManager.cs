@@ -10,6 +10,8 @@ public class ChatSessionManager : MonoBehaviour
     [SerializeField] private RectTransform[] chatContents; // Content_Group1..4
     [SerializeField] private RectTransform[] choicePanels; // ChoicePanel_Group1..4
     [SerializeField] private ChatDialogueControllerMulti dialogueController;
+    [SerializeField] private DialogueRunner dialogueRunner;
+
 
 
     public int CurrentIndex { get; private set; } = 0;
@@ -37,6 +39,8 @@ public class ChatSessionManager : MonoBehaviour
             if (choicePanels[i]) choicePanels[i].gameObject.SetActive(i == index);
 
         if (dialogueController) dialogueController.OnChatSwitched();
+
+        if (dialogueRunner) dialogueRunner.OnGroupSwitched();
 
 
         CurrentIndex = index;
