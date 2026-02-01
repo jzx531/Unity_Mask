@@ -4,149 +4,90 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class ChatDialogueController : MonoBehaviour
+public class ChatDialogueControllerMulti : MonoBehaviour
 {
-    [Header("Existing Chat UI")]
+    [Header("Session + UI")]
+    [SerializeField] private ChatSessionManager session;
     [SerializeField] private TMP_InputField inputField;
     [SerializeField] private ScrollRect messageScrollRect;
-    [SerializeField] private RectTransform content;
+
+    [Header("Prefabs")]
     [SerializeField] private GameObject leftBubblePrefab;
     [SerializeField] private GameObject rightBubblePrefab;
+    [SerializeField] private GameObject choiceBubblePrefab;
 
-    [Header("Choice UI")]
-    [SerializeField] private RectTransform choicePanel;      // Step 3.1 的 ChoicePanel
-    [SerializeField] private GameObject choiceBubblePrefab;  // Step 3.2 的 ChoiceBubble.prefab
-    [SerializeField] private int maxChoicesToShow = 3;
+    [Header("Options")]
+    [Range(0.1f, 1f)] public float maxChoicesToShow = 3;
 
-    // ====== Dialogue Model ======
-    [Serializable]
-    public class Choice
-    {
-        public string text;        // 选项文字（会自动填入输入框并发送）
-        public string nextNodeId;  // 选完跳到哪个节点
-    }
-
-    [Serializable]
-    public class Node
-    {
-        public string id;
-        public string npcMessage;      // 左气泡先说的话（进入节点时发）
-        public List<Choice> choices;   // 该节点的三选项（或少于3）
-    }
+    // ===== Dialogue Model =====
+    [Serializable] public class Choice { public string text; public string nextNodeId; }
+    [Serializable] public class Node { public string id; public string npcMessage; public List<Choice> choices; }
 
     Dictionary<string, Node> _nodes;
-    Node _current;
+
+    // 每个群聊一个状态
+    class ChatState
+    {
+        public string currentNodeId;
+        public bool started;
+    }
+
+    ChatState[] _states;
 
     void Start()
     {
         BuildDemoDialogue();
-        EnterNode("start");
+
+        // 4个群聊（你可以改成 session.chatContents.Length 但字段是 private，先固定）
+        _states = new ChatState[4];
+        for (int i = 0; i < _states.Length; i++) _states[i] = new ChatState();
+
+        // 初始群聊：进入并启动
+        EnsureStarted(session.CurrentIndex);
+        RenderChoicesForCurrentChat();
     }
 
-    // 你后续可以把这些数据换成 ScriptableObject/JSON
-    void BuildDemoDialogue()
+    // 你需要在 ChatSessionManager.SwitchTo 之后调用它（下一步会教你怎么接）
+    public void OnChatSwitched()
     {
-        _nodes = new Dictionary<string, Node>();
-
-        _nodes["start"] = new Node
-        {
-            id = "start",
-            npcMessage = "（群聊）大家好！今晚吃什么？",
-            choices = new List<Choice>
-            {
-                new Choice{ text="火锅！", nextNodeId="hotpot"},
-                new Choice{ text="烧烤吧", nextNodeId="bbq"},
-                new Choice{ text="随便都行，你们定", nextNodeId="whatever"},
-            }
-        };
-
-        _nodes["hotpot"] = new Node
-        {
-            id = "hotpot",
-            npcMessage = "好！那就火锅。你想吃麻辣还是清汤？",
-            choices = new List<Choice>
-            {
-                new Choice{ text="麻辣！越辣越好", nextNodeId="hotpot_spicy"},
-                new Choice{ text="清汤，我怕辣", nextNodeId="hotpot_clear"},
-                new Choice{ text="鸳鸯锅", nextNodeId="hotpot_dual"},
-            }
-        };
-
-        _nodes["bbq"] = new Node
-        {
-            id = "bbq",
-            npcMessage = "烧烤安排！你想吃哪家？",
-            choices = new List<Choice>
-            {
-                new Choice{ text="公司附近那家", nextNodeId="bbq_near"},
-                new Choice{ text="网红店试试", nextNodeId="bbq_hot"},
-                new Choice{ text="我都行", nextNodeId="bbq_any"},
-            }
-        };
-
-        _nodes["whatever"] = new Node
-        {
-            id = "whatever",
-            npcMessage = "别‘随便’啦😂 你至少给个方向：辣/不辣？",
-            choices = new List<Choice>
-            {
-                new Choice{ text="要辣的", nextNodeId="hotpot"},
-                new Choice{ text="不辣的", nextNodeId="hotpot_clear"},
-                new Choice{ text="你们投票吧", nextNodeId="vote"},
-            }
-        };
-
-        _nodes["vote"] = new Node
-        {
-            id = "vote",
-            npcMessage = "行，那我发个投票～（此处可扩展投票UI）",
-            choices = new List<Choice>
-            {
-                new Choice{ text="我投火锅", nextNodeId="hotpot"},
-                new Choice{ text="我投烧烤", nextNodeId="bbq"},
-                new Choice{ text="我投其他", nextNodeId="other"},
-            }
-        };
-
-        _nodes["other"] = new Node
-        {
-            id = "other",
-            npcMessage = "那你说说想吃啥？（这里可以改成自由输入继续对话）",
-            choices = new List<Choice>
-            {
-                new Choice{ text="日料", nextNodeId="end"},
-                new Choice{ text="披萨", nextNodeId="end"},
-                new Choice{ text="面", nextNodeId="end"},
-            }
-        };
-
-        // 结束节点（无选项）
-        _nodes["end"] = new Node
-        {
-            id = "end",
-            npcMessage = "OK！",
-            choices = new List<Choice>()
-        };
+        EnsureStarted(session.CurrentIndex);
+        RenderChoicesForCurrentChat();
+        ScrollToBottom();
     }
 
-    void EnterNode(string nodeId)
+    void EnsureStarted(int chatIndex)
     {
-        if (!_nodes.TryGetValue(nodeId, out _current))
+        var st = _states[chatIndex];
+        if (st.started) return;
+
+        st.started = true;
+        st.currentNodeId = "start";
+
+        // 第一次进入该群聊，发开场左气泡并出选项
+        EnterNode(chatIndex, st.currentNodeId);
+    }
+
+    void EnterNode(int chatIndex, string nodeId)
+    {
+        if (!_nodes.TryGetValue(nodeId, out var node))
         {
             Debug.LogError($"Node not found: {nodeId}");
             return;
         }
 
-        // 1) 先发左气泡（群聊消息）
-        if (!string.IsNullOrEmpty(_current.npcMessage))
-            SpawnLeft(_current.npcMessage);
+        _states[chatIndex].currentNodeId = nodeId;
 
-        // 2) 再显示三条右气泡选项
-        ShowChoices(_current.choices);
+        if (!string.IsNullOrEmpty(node.npcMessage))
+            SpawnLeft(node.npcMessage);
+
+        ShowChoices(node.choices);
     }
 
     void ShowChoices(List<Choice> choices)
     {
+        var choicePanel = session.GetCurrentChoicePanel();
+        if (!choicePanel) return;
+
         // 清空旧选项
         for (int i = choicePanel.childCount - 1; i >= 0; i--)
             Destroy(choicePanel.GetChild(i).gameObject);
@@ -159,17 +100,15 @@ public class ChatDialogueController : MonoBehaviour
 
         choicePanel.gameObject.SetActive(true);
 
-        int count = Mathf.Min(maxChoicesToShow, choices.Count);
+        int count = Mathf.Min((int)maxChoicesToShow, choices.Count);
         for (int i = 0; i < count; i++)
         {
             var choice = choices[i];
             var go = Instantiate(choiceBubblePrefab, choicePanel);
 
-            // 设置文字
             var tmp = go.GetComponentInChildren<TextMeshProUGUI>(true);
             if (tmp) tmp.text = choice.text;
 
-            // 绑定点击
             var btn = go.GetComponentInChildren<Button>(true);
             if (!btn) btn = go.GetComponent<Button>();
             if (btn)
@@ -184,27 +123,38 @@ public class ChatDialogueController : MonoBehaviour
 
     void OnChoiceClicked(Choice choice)
     {
-        // 1) 选项文字自动输入到输入框
+        // 自动填入 + 自动发送（右气泡）
         inputField.text = choice.text;
-
-        // 2) 自动发送成右气泡
         SpawnRight(choice.text);
-
-        // 3) 清空输入框并保持焦点
         inputField.text = "";
         inputField.ActivateInputField();
         inputField.Select();
 
-        // 4) 隐藏选项（防止重复点）
-        choicePanel.gameObject.SetActive(false);
+        // 隐藏当前选项，避免重复点
+        var cp = session.GetCurrentChoicePanel();
+        if (cp) cp.gameObject.SetActive(false);
 
-        // 5) 进入下一节点：弹出对应左气泡 + 新的三选项
+        // 进入下一节点（在当前群聊）
+        int idx = session.CurrentIndex;
         if (!string.IsNullOrEmpty(choice.nextNodeId))
-            EnterNode(choice.nextNodeId);
+            EnterNode(idx, choice.nextNodeId);
+    }
+
+    void RenderChoicesForCurrentChat()
+    {
+        int idx = session.CurrentIndex;
+        var nodeId = _states[idx].currentNodeId;
+        if (string.IsNullOrEmpty(nodeId)) return;
+
+        if (_nodes.TryGetValue(nodeId, out var node))
+            ShowChoices(node.choices);
     }
 
     void SpawnLeft(string msg)
     {
+        var content = session.GetCurrentContent();
+        if (!content) return;
+
         var go = Instantiate(leftBubblePrefab, content);
         var tmp = go.GetComponentInChildren<TextMeshProUGUI>(true);
         if (tmp) tmp.text = msg;
@@ -213,6 +163,9 @@ public class ChatDialogueController : MonoBehaviour
 
     void SpawnRight(string msg)
     {
+        var content = session.GetCurrentContent();
+        if (!content) return;
+
         var go = Instantiate(rightBubblePrefab, content);
         var tmp = go.GetComponentInChildren<TextMeshProUGUI>(true);
         if (tmp) tmp.text = msg;
@@ -224,5 +177,65 @@ public class ChatDialogueController : MonoBehaviour
         Canvas.ForceUpdateCanvases();
         if (messageScrollRect) messageScrollRect.verticalNormalizedPosition = 0f;
         Canvas.ForceUpdateCanvases();
+    }
+
+    void BuildDemoDialogue()
+    {
+        _nodes = new Dictionary<string, Node>();
+
+        _nodes["start"] = new Node
+        {
+            id = "start",
+            npcMessage = "（群聊）欢迎来到群聊 A：今晚安排？",
+            choices = new List<Choice>
+            {
+                new Choice{ text="火锅", nextNodeId="hotpot"},
+                new Choice{ text="烧烤", nextNodeId="bbq"},
+                new Choice{ text="随便", nextNodeId="whatever"},
+            }
+        };
+
+        _nodes["hotpot"] = new Node
+        {
+            id = "hotpot",
+            npcMessage = "火锅OK！麻辣/清汤/鸳鸯？",
+            choices = new List<Choice>
+            {
+                new Choice{ text="麻辣", nextNodeId="end"},
+                new Choice{ text="清汤", nextNodeId="end"},
+                new Choice{ text="鸳鸯", nextNodeId="end"},
+            }
+        };
+
+        _nodes["bbq"] = new Node
+        {
+            id = "bbq",
+            npcMessage = "烧烤走起！去哪家？",
+            choices = new List<Choice>
+            {
+                new Choice{ text="公司附近", nextNodeId="end"},
+                new Choice{ text="网红店", nextNodeId="end"},
+                new Choice{ text="都行", nextNodeId="end"},
+            }
+        };
+
+        _nodes["whatever"] = new Node
+        {
+            id = "whatever",
+            npcMessage = "别随便😂 给个方向：辣/不辣？",
+            choices = new List<Choice>
+            {
+                new Choice{ text="要辣", nextNodeId="hotpot"},
+                new Choice{ text="不辣", nextNodeId="end"},
+                new Choice{ text="投票吧", nextNodeId="end"},
+            }
+        };
+
+        _nodes["end"] = new Node
+        {
+            id = "end",
+            npcMessage = "OK，就这么定。",
+            choices = new List<Choice>()
+        };
     }
 }

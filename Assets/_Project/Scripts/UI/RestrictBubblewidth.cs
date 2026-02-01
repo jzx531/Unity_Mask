@@ -1,5 +1,6 @@
-using UnityEngine;
 using TMPro;
+using UnityEngine;
+using static Unity.Burst.Intrinsics.X86.Avx;
 
 [RequireComponent(typeof(TextMeshProUGUI))]
 public class ChatBubbleTextWidthClamp : MonoBehaviour
@@ -34,3 +35,4 @@ public class ChatBubbleTextWidthClamp : MonoBehaviour
         }
     }
 }
+

@@ -4,12 +4,16 @@ using UnityEngine.UI;
 
 public class ChatSendController : MonoBehaviour
 {
-    [Header("UI Refs")]
+    [Header("Input")]
     [SerializeField] private TMP_InputField inputField;
-    [SerializeField] private ScrollRect messageScrollRect;
-    [SerializeField] private RectTransform content;
 
-    [Header("Bubble Prefabs")]
+    [Header("Scrolling")]
+    [SerializeField] private ScrollRect messageScrollRect;
+
+    [Header("Session")]
+    [SerializeField] private ChatSessionManager session;
+
+    [Header("Prefabs")]
     [SerializeField] private GameObject rightBubblePrefab;
 
     void Awake()
@@ -26,34 +30,39 @@ public class ChatSendController : MonoBehaviour
 
     void Update()
     {
-        // 兜底：确保按回车能发送（某些输入设置下 onSubmit 可能不触发）
-        if (inputField == null || !inputField.isFocused) return;
+        if (!inputField || !inputField.isFocused) return;
 
         if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
             TrySend();
     }
 
-    private void TrySend()
+    public void TrySend()
     {
-        if (inputField == null || rightBubblePrefab == null || content == null) return;
-
         var text = inputField.text?.Trim();
         if (string.IsNullOrEmpty(text)) return;
 
-        var bubble = Instantiate(rightBubblePrefab, content);
+        var content = session ? session.GetCurrentContent() : null;
+        if (!content)
+        {
+            Debug.LogError("No current content from session.");
+            return;
+        }
 
-        // 找到气泡里的 TextMeshProUGUI（你气泡里 MessageText 就是它）
+        var bubble = Instantiate(rightBubblePrefab, content);
         var tmp = bubble.GetComponentInChildren<TextMeshProUGUI>(true);
-        if (tmp != null) tmp.text = text;
+        if (tmp) tmp.text = text;
 
         inputField.text = "";
         inputField.ActivateInputField();
         inputField.Select();
 
-        // 布局刷新 + 滚到底
+        ScrollToBottom();
+    }
+
+    void ScrollToBottom()
+    {
         Canvas.ForceUpdateCanvases();
-        if (messageScrollRect != null)
-            messageScrollRect.verticalNormalizedPosition = 0f;
+        if (messageScrollRect) messageScrollRect.verticalNormalizedPosition = 0f;
         Canvas.ForceUpdateCanvases();
     }
 }
